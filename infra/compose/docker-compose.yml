@@ -1,0 +1,158 @@
+version: '3.8'
+
+services:
+  # Base de datos PostgreSQL
+  postgres:
+    image: postgres:15-alpine
+    container_name: asc-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: asc_db
+      POSTGRES_USER: asc_user
+      POSTGRES_PASSWORD: asc_password
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ../../migrations:/docker-entrypoint-initdb.d
+    networks:
+      - asc-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U asc_user -d asc_db"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Redis para cache y sesiones
+  redis:
+    image: redis:7-alpine
+    container_name: asc-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - asc-network
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # MinIO para almacenamiento S3-compatible
+  minio:
+    image: minio/minio:latest
+    container_name: asc-minio
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: asc_minio_user
+      MINIO_ROOT_PASSWORD: asc_minio_password
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    networks:
+      - asc-network
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # MailHog para testing de emails en desarrollo
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: asc-mailhog
+    restart: unless-stopped
+    ports:
+      - "1025:1025"  # SMTP
+      - "8025:8025"  # Web UI
+    networks:
+      - asc-network
+
+  # Backend API (NestJS)
+  api:
+    build:
+      context: ../../
+      dockerfile: apps/api/Dockerfile
+      target: development
+    container_name: asc-api
+    restart: unless-stopped
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgresql://asc_user:asc_password@postgres:5432/asc_db
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: your-super-secret-jwt-key-change-in-production
+      JWT_REFRESH_SECRET: your-super-secret-refresh-key-change-in-production
+      STORAGE_ENDPOINT: http://minio:9000
+      STORAGE_ACCESS_KEY: asc_minio_user
+      STORAGE_SECRET_KEY: asc_minio_password
+      STORAGE_BUCKET: asc-documents
+      MAIL_HOST: mailhog
+      MAIL_PORT: 1025
+      MAIL_USER: ""
+      MAIL_PASS: ""
+      MAIL_FROM: noreply@asc.local
+      APP_BASE_URL: http://localhost:3000
+      API_BASE_URL: http://localhost:3001
+    ports:
+      - "3001:3001"
+    volumes:
+      - ../../apps/api:/app/apps/api
+      - ../../packages:/app/packages
+      - /app/node_modules
+      - /app/apps/api/node_modules
+    networks:
+      - asc-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    command: npm run dev:api
+
+  # Frontend Web (Next.js)
+  web:
+    build:
+      context: ../../
+      dockerfile: apps/web/Dockerfile
+      target: development
+    container_name: asc-web
+    restart: unless-stopped
+    environment:
+      NODE_ENV: development
+      NEXT_PUBLIC_API_URL: http://localhost:3001
+      NEXTAUTH_URL: http://localhost:3000
+      NEXTAUTH_SECRET: your-super-secret-nextauth-key-change-in-production
+    ports:
+      - "3000:3000"
+    volumes:
+      - ../../apps/web:/app/apps/web
+      - ../../packages:/app/packages
+      - /app/node_modules
+      - /app/apps/web/node_modules
+      - /app/apps/web/.next
+    networks:
+      - asc-network
+    depends_on:
+      - api
+    command: npm run dev:web
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  minio_data:
+    driver: local
+
+networks:
+  asc-network:
+    driver: bridge

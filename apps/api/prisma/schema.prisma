@@ -1,0 +1,530 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Empresa {
+  id            String   @id @default(uuid()) @db.Uuid
+  codigo        String   @unique @db.VarChar(20)
+  nombre        String   @db.VarChar(255)
+  email         String?  @db.VarChar(255)
+  telefono      String?  @db.VarChar(50)
+  direccion     String?
+  logoUrl       String?  @map("logo_url") @db.VarChar(500)
+  activa        Boolean  @default(true)
+  configuracion Json     @default("{}")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  usuarios              Usuario[]
+  clientes              Cliente[]
+  activos               Activo[]
+  formularios           Formulario[]
+  formCampos            FormCampo[]
+  planesMantenimiento   PlanMantenimiento[]
+  cotizaciones          Cotizacion[]
+  cotizacionItems       CotizacionItem[]
+  ordenesTorabajo       OrdenTrabajo[]
+  otReparacionItems     OtReparacionItem[]
+  emergencias           Emergencia[]
+  bitacora              Bitacora[]
+  ajustesEmpresa        AjustesEmpresa?
+
+  @@map("empresas")
+}
+
+model Usuario {
+  id           String    @id @default(uuid()) @db.Uuid
+  empresaId    String    @map("empresa_id") @db.Uuid
+  username     String    @db.VarChar(100)
+  email        String    @db.VarChar(255)
+  passwordHash String    @map("password_hash") @db.VarChar(255)
+  rol          Rol
+  nombre       String    @db.VarChar(255)
+  apellido     String?   @db.VarChar(255)
+  telefono     String?   @db.VarChar(50)
+  activo       Boolean   @default(true)
+  ultimoLogin  DateTime? @map("ultimo_login") @db.Timestamptz(6)
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  empresa                    Empresa            @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  cotizacionesCreadas        Cotizacion[]       @relation("CotizacionCreadoPor")
+  cotizacionesAprobadas      Cotizacion[]       @relation("CotizacionAprobadoPor")
+  cotizacionItemsAgregados   CotizacionItem[]   @relation("CotizacionItemAgregadoPor")
+  cotizacionItemsPrecio      CotizacionItem[]   @relation("CotizacionItemPrecioAsignadoPor")
+  ordenesTrabajoAsignadas    OrdenTrabajo[]     @relation("OrdenTrabajoAsignadoA")
+  ordenesTrabajoCreadas      OrdenTrabajo[]     @relation("OrdenTrabajoCreadoPor")
+  emergenciasAsignadas       Emergencia[]       @relation("EmergenciaAsignadoA")
+  bitacora                   Bitacora[]
+
+  @@unique([empresaId, username])
+  @@unique([empresaId, email])
+  @@map("usuarios")
+}
+
+model Cliente {
+  id                String   @id @default(uuid()) @db.Uuid
+  empresaId         String   @map("empresa_id") @db.Uuid
+  codigo            String   @db.VarChar(50)
+  nombre            String   @db.VarChar(255)
+  email             String?  @db.VarChar(255)
+  telefono          String?  @db.VarChar(50)
+  direccion         String?
+  contactoPrincipal String?  @map("contacto_principal") @db.VarChar(255)
+  activo            Boolean  @default(true)
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  empresa         Empresa        @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  activos         Activo[]
+  cotizaciones    Cotizacion[]
+  ordenesTorabajo OrdenTrabajo[]
+  emergencias     Emergencia[]
+
+  @@unique([empresaId, codigo])
+  @@map("clientes")
+}
+
+model Activo {
+  id                String        @id @default(uuid()) @db.Uuid
+  empresaId         String        @map("empresa_id") @db.Uuid
+  clienteId         String        @map("cliente_id") @db.Uuid
+  codigo            String        @db.VarChar(100)
+  nombre            String        @db.VarChar(255)
+  descripcion       String?
+  marca             String?       @db.VarChar(100)
+  modelo            String?       @db.VarChar(100)
+  numeroSerie       String?       @map("numero_serie") @db.VarChar(100)
+  ubicacion         String?       @db.VarChar(255)
+  estado            EstadoActivo  @default(operativo)
+  criticidad        Criticidad    @default(media)
+  fechaInstalacion  DateTime?     @map("fecha_instalacion") @db.Date
+  valorCompra       Decimal?      @map("valor_compra") @db.Decimal(15, 2)
+  vidaUtilAnos      Int?          @map("vida_util_anos")
+  qrCode            String?       @map("qr_code") @db.VarChar(255)
+  nfcTag            String?       @map("nfc_tag") @db.VarChar(255)
+  createdAt         DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  empresa             Empresa             @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  cliente             Cliente             @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  planesMantenimiento PlanMantenimiento[]
+  cotizaciones        Cotizacion[]
+  ordenesTorabajo     OrdenTrabajo[]
+  emergencias         Emergencia[]
+  bitacora            Bitacora[]
+
+  @@unique([empresaId, codigo])
+  @@map("activos")
+}
+
+model Formulario {
+  id            String        @id @default(uuid()) @db.Uuid
+  empresaId     String        @map("empresa_id") @db.Uuid
+  nombre        String        @db.VarChar(255)
+  descripcion   String?
+  ambito        AmbitoFormulario
+  activo        Boolean       @default(true)
+  configuracion Json          @default("{}")
+  createdAt     DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  empresa             Empresa             @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  campos              FormCampo[]
+  planesMantenimiento PlanMantenimiento[]
+  ordenesTorabajo     OrdenTrabajo[]
+
+  @@map("formularios")
+}
+
+model FormCampo {
+  id           String      @id @default(uuid()) @db.Uuid
+  empresaId    String      @map("empresa_id") @db.Uuid
+  formularioId String      @map("formulario_id") @db.Uuid
+  nombre       String      @db.VarChar(255)
+  etiqueta     String      @db.VarChar(255)
+  tipo         TipoCampo
+  requerido    Boolean     @default(false)
+  orden        Int
+  opciones     Json        @default("[]")
+  validaciones Json        @default("{}")
+  dependencias Json        @default("{}")
+  createdAt    DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  // Relations
+  empresa    Empresa    @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  formulario Formulario @relation(fields: [formularioId], references: [id], onDelete: Cascade)
+
+  @@map("form_campos")
+}
+
+model PlanMantenimiento {
+  id               String      @id @default(uuid()) @db.Uuid
+  empresaId        String      @map("empresa_id") @db.Uuid
+  activoId         String      @map("activo_id") @db.Uuid
+  nombre           String      @db.VarChar(255)
+  descripcion      String?
+  periodicidad     Periodicidad
+  intervaloDias    Int?        @map("intervalo_dias")
+  formularioId     String?     @map("formulario_id") @db.Uuid
+  activo           Boolean     @default(true)
+  proximaEjecucion DateTime?   @map("proxima_ejecucion") @db.Date
+  createdAt        DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime    @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  empresa     Empresa      @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  activo      Activo       @relation(fields: [activoId], references: [id], onDelete: Cascade)
+  formulario  Formulario?  @relation(fields: [formularioId], references: [id])
+  ordenesTorabajo OrdenTrabajo[]
+
+  @@map("planes_mantenimiento")
+}
+
+model Cotizacion {
+  id               String            @id @default(uuid()) @db.Uuid
+  empresaId        String            @map("empresa_id") @db.Uuid
+  clienteId        String            @map("cliente_id") @db.Uuid
+  activoId         String            @map("activo_id") @db.Uuid
+  numero           String            @db.VarChar(50)
+  estado           EstadoCotizacion  @default(borrador)
+  titulo           String            @db.VarChar(255)
+  descripcion      String?
+  subtotal         Decimal           @default(0) @db.Decimal(15, 2)
+  impuestos        Decimal           @default(0) @db.Decimal(15, 2)
+  total            Decimal           @default(0) @db.Decimal(15, 2)
+  validezDias      Int               @default(30) @map("validez_dias")
+  creadoPor        String            @map("creado_por") @db.Uuid
+  aprobadoPor      String?           @map("aprobado_por") @db.Uuid
+  fechaAprobacion  DateTime?         @map("fecha_aprobacion") @db.Timestamptz(6)
+  createdAt        DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime          @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  empresa         Empresa          @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  cliente         Cliente          @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  activo          Activo           @relation(fields: [activoId], references: [id], onDelete: Cascade)
+  usuarioCreadoPor Usuario         @relation("CotizacionCreadoPor", fields: [creadoPor], references: [id])
+  usuarioAprobadoPor Usuario?      @relation("CotizacionAprobadoPor", fields: [aprobadoPor], references: [id])
+  items           CotizacionItem[]
+  ordenesTorabajo OrdenTrabajo[]
+  bitacora        Bitacora[]
+
+  @@unique([empresaId, numero])
+  @@map("cotizaciones")
+}
+
+model CotizacionItem {
+  id                 String    @id @default(uuid()) @db.Uuid
+  empresaId          String    @map("empresa_id") @db.Uuid
+  cotizacionId       String    @map("cotizacion_id") @db.Uuid
+  descripcion        String
+  cantidad           Decimal   @default(1) @db.Decimal(10, 2)
+  precioUnitario     Decimal   @default(0) @map("precio_unitario") @db.Decimal(15, 2)
+  subtotal           Decimal   @default(0) @db.Decimal(15, 2)
+  urgencia           Urgencia  @default(media)
+  agregadoPor        String    @map("agregado_por") @db.Uuid
+  precioAsignadoPor  String?   @map("precio_asignado_por") @db.Uuid
+  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  empresa               Empresa            @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  cotizacion            Cotizacion         @relation(fields: [cotizacionId], references: [id], onDelete: Cascade)
+  usuarioAgregadoPor    Usuario            @relation("CotizacionItemAgregadoPor", fields: [agregadoPor], references: [id])
+  usuarioPrecioAsignado Usuario?           @relation("CotizacionItemPrecioAsignadoPor", fields: [precioAsignadoPor], references: [id])
+  otReparacionItems     OtReparacionItem[]
+
+  @@map("cotizacion_items")
+}
+
+model OrdenTrabajo {
+  id                    String             @id @default(uuid()) @db.Uuid
+  empresaId             String             @map("empresa_id") @db.Uuid
+  numero                String             @db.VarChar(50)
+  tipo                  TipoOrdenTrabajo
+  estado                EstadoOrdenTrabajo @default(nueva)
+  prioridad             Prioridad          @default(media)
+  activoId              String             @map("activo_id") @db.Uuid
+  clienteId             String             @map("cliente_id") @db.Uuid
+  cotizacionId          String?            @map("cotizacion_id") @db.Uuid
+  planMantenimientoId   String?            @map("plan_mantenimiento_id") @db.Uuid
+  titulo                String             @db.VarChar(255)
+  descripcion           String?
+  asignadoA             String?            @map("asignado_a") @db.Uuid
+  creadoPor             String             @map("creado_por") @db.Uuid
+  fechaProgramada       DateTime?          @map("fecha_programada") @db.Timestamptz(6)
+  fechaInicio           DateTime?          @map("fecha_inicio") @db.Timestamptz(6)
+  fechaFin              DateTime?          @map("fecha_fin") @db.Timestamptz(6)
+  tiempoEstimadoHoras   Decimal?           @map("tiempo_estimado_horas") @db.Decimal(5, 2)
+  tiempoRealHoras       Decimal?           @map("tiempo_real_horas") @db.Decimal(5, 2)
+  formularioId          String?            @map("formulario_id") @db.Uuid
+  respuestasFormulario  Json               @default("{}") @map("respuestas_formulario")
+  observaciones         String?
+  motivoCancelacion     String?            @map("motivo_cancelacion")
+  createdAt             DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime           @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  empresa           Empresa            @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  activo            Activo             @relation(fields: [activoId], references: [id], onDelete: Cascade)
+  cliente           Cliente            @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  cotizacion        Cotizacion?        @relation(fields: [cotizacionId], references: [id])
+  planMantenimiento PlanMantenimiento? @relation(fields: [planMantenimientoId], references: [id])
+  usuarioAsignado   Usuario?           @relation("OrdenTrabajoAsignadoA", fields: [asignadoA], references: [id])
+  usuarioCreador    Usuario            @relation("OrdenTrabajoCreadoPor", fields: [creadoPor], references: [id])
+  formulario        Formulario?        @relation(fields: [formularioId], references: [id])
+  reparacionItems   OtReparacionItem[]
+  emergencias       Emergencia[]
+  bitacora          Bitacora[]
+
+  @@unique([empresaId, numero])
+  @@map("ordenes_trabajo")
+}
+
+model OtReparacionItem {
+  id                String                @id @default(uuid()) @db.Uuid
+  empresaId         String                @map("empresa_id") @db.Uuid
+  ordenTrabajoId    String                @map("orden_trabajo_id") @db.Uuid
+  cotizacionItemId  String?               @map("cotizacion_item_id") @db.Uuid
+  descripcion       String
+  estado            EstadoReparacionItem  @default(pendiente)
+  observaciones     String?
+  fotosAntes        Json                  @default("[]") @map("fotos_antes")
+  fotosDespues      Json                  @default("[]") @map("fotos_despues")
+  tiempoHoras       Decimal?              @map("tiempo_horas") @db.Decimal(5, 2)
+  createdAt         DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime              @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  empresa        Empresa         @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  ordenTrabajo   OrdenTrabajo    @relation(fields: [ordenTrabajoId], references: [id], onDelete: Cascade)
+  cotizacionItem CotizacionItem? @relation(fields: [cotizacionItemId], references: [id])
+
+  @@map("ot_reparacion_items")
+}
+
+model Emergencia {
+  id                  String          @id @default(uuid()) @db.Uuid
+  empresaId           String          @map("empresa_id") @db.Uuid
+  activoId            String          @map("activo_id") @db.Uuid
+  clienteId           String          @map("cliente_id") @db.Uuid
+  numero              String          @db.VarChar(50)
+  estado              EstadoEmergencia @default(llamada)
+  descripcion         String
+  reportadoPor        String?         @map("reportado_por") @db.VarChar(255)
+  telefonoContacto    String?         @map("telefono_contacto") @db.VarChar(50)
+  horaLlamada         DateTime        @map("hora_llamada") @db.Timestamptz(6)
+  horaAsignacion      DateTime?       @map("hora_asignacion") @db.Timestamptz(6)
+  horaLlegada         DateTime?       @map("hora_llegada") @db.Timestamptz(6)
+  horaCierre          DateTime?       @map("hora_cierre") @db.Timestamptz(6)
+  asignadoA           String?         @map("asignado_a") @db.Uuid
+  slaMinutos          Int             @default(240) @map("sla_minutos")
+  cumpleSla           Boolean?        @map("cumple_sla")
+  estadoFinalActivo   EstadoActivo?   @map("estado_final_activo")
+  ordenTrabajoId      String?         @map("orden_trabajo_id") @db.Uuid
+  createdAt           DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime        @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  empresa        Empresa       @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  activo         Activo        @relation(fields: [activoId], references: [id], onDelete: Cascade)
+  cliente        Cliente       @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  usuarioAsignado Usuario?     @relation("EmergenciaAsignadoA", fields: [asignadoA], references: [id])
+  ordenTrabajo   OrdenTrabajo? @relation(fields: [ordenTrabajoId], references: [id])
+  bitacora       Bitacora[]
+
+  @@unique([empresaId, numero])
+  @@map("emergencias")
+}
+
+model Bitacora {
+  id             String      @id @default(uuid()) @db.Uuid
+  empresaId      String      @map("empresa_id") @db.Uuid
+  activoId       String      @map("activo_id") @db.Uuid
+  tipo           TipoBitacora
+  descripcion    String
+  ordenTrabajoId String?     @map("orden_trabajo_id") @db.Uuid
+  emergenciaId   String?     @map("emergencia_id") @db.Uuid
+  cotizacionId   String?     @map("cotizacion_id") @db.Uuid
+  usuarioId      String?     @map("usuario_id") @db.Uuid
+  fecha          DateTime    @default(now()) @db.Timestamptz(6)
+  metadatos      Json        @default("{}")
+
+  // Relations
+  empresa      Empresa       @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  activo       Activo        @relation(fields: [activoId], references: [id], onDelete: Cascade)
+  ordenTrabajo OrdenTrabajo? @relation(fields: [ordenTrabajoId], references: [id])
+  emergencia   Emergencia?   @relation(fields: [emergenciaId], references: [id])
+  cotizacion   Cotizacion?   @relation(fields: [cotizacionId], references: [id])
+  usuario      Usuario?      @relation(fields: [usuarioId], references: [id])
+
+  @@map("bitacora")
+}
+
+model AjustesEmpresa {
+  id                       String   @id @default(uuid()) @db.Uuid
+  empresaId                String   @unique @map("empresa_id") @db.Uuid
+  desviosEnTerrenoEnabled  Boolean  @default(false) @map("desvios_en_terreno_enabled")
+  qrNfcEnabled             Boolean  @default(true) @map("qr_nfc_enabled")
+  alertRules               Json     @default("{\"pct_detenidos_threshold\": 20, \"sla_riesgo_threshold\": 80, \"vencimientos_dias\": 7}") @map("alert_rules")
+  branding                 Json     @default("{}") 
+  createdAt                DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  empresa Empresa @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+
+  @@map("ajustes_empresa")
+}
+
+// Enums
+enum Rol {
+  admin
+  lider_equipo
+  tecnico
+
+  @@map("rol")
+}
+
+enum EstadoActivo {
+  operativo
+  detenido
+  mantenimiento
+  fuera_servicio
+
+  @@map("estado_activo")
+}
+
+enum Criticidad {
+  baja
+  media
+  alta
+  critica
+
+  @@map("criticidad")
+}
+
+enum AmbitoFormulario {
+  mantenimiento
+  inspeccion
+  emergencia
+  reparacion
+
+  @@map("ambito_formulario")
+}
+
+enum TipoCampo {
+  text
+  number
+  date
+  select
+  multiselect
+  checklist
+  photo
+  signature
+
+  @@map("tipo_campo")
+}
+
+enum Periodicidad {
+  mensual
+  trimestral
+  semestral
+  anual
+  custom
+
+  @@map("periodicidad")
+}
+
+enum EstadoCotizacion {
+  borrador
+  en_revision
+  lista_envio
+  enviada
+  aprobada
+  rechazada
+  cerrada
+
+  @@map("estado_cotizacion")
+}
+
+enum Urgencia {
+  baja
+  media
+  alta
+
+  @@map("urgencia")
+}
+
+enum TipoOrdenTrabajo {
+  mantenimiento
+  reparacion
+  emergencia
+  inspeccion
+
+  @@map("tipo_orden_trabajo")
+}
+
+enum EstadoOrdenTrabajo {
+  nueva
+  asignada
+  en_curso
+  en_espera
+  cerrada
+  cancelada
+
+  @@map("estado_orden_trabajo")
+}
+
+enum Prioridad {
+  baja
+  media
+  alta
+  critica
+
+  @@map("prioridad")
+}
+
+enum EstadoReparacionItem {
+  pendiente
+  completado
+  parcial
+  no_realizado
+
+  @@map("estado_reparacion_item")
+}
+
+enum EstadoEmergencia {
+  llamada
+  asignada
+  en_ruta
+  en_sitio
+  resuelta
+  cerrada
+
+  @@map("estado_emergencia")
+}
+
+enum TipoBitacora {
+  mantenimiento
+  reparacion
+  emergencia
+  inspeccion
+  cambio_estado
+
+  @@map("tipo_bitacora")
+}
