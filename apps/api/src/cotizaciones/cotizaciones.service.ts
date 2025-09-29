@@ -1,4 +1,10 @@
-import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+  BadRequestException,
+  StreamableFile,
+} from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import { CreateCotizacionDto } from './dto/create-cotizacion.dto';
 import { UpdateCotizacionDto } from './dto/update-cotizacion.dto';
@@ -6,10 +12,14 @@ import { AddItemCotizacionDto } from './dto/add-item-cotizacion.dto';
 import { UpdateItemCotizacionDto } from './dto/update-item-cotizacion.dto';
 import { AsignarPreciosDto } from './dto/asignar-precios.dto';
 import { CurrentUserData } from '../auth/decorators/current-user.decorator';
+import { PdfService, CotizacionPdfData } from '../shared/pdf/pdf.service';
 
 @Injectable()
 export class CotizacionesService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly pdfService: PdfService,
+  ) {}
 
   async create(createCotizacionDto: CreateCotizacionDto, user: CurrentUserData) {
     // Generar número de cotización
@@ -322,5 +332,63 @@ export class CotizacionesService {
     return this.prisma.cotizacion.delete({
       where: { id },
     });
+  }
+
+  async generatePdf(id: string, user: CurrentUserData): Promise<StreamableFile> {
+    const cotizacion = await this.prisma.cotizacion.findUnique({
+      where: { id },
+      include: {
+        cliente: true,
+        activo: true,
+        items: {
+          orderBy: { createdAt: 'asc' },
+        },
+      },
+    });
+
+    if (!cotizacion) {
+      throw new NotFoundException('Cotización no encontrada');
+    }
+
+    if (cotizacion.empresaId !== user.empresaId) {
+      throw new ForbiddenException('No tienes acceso a esta cotización');
+    }
+
+    const includePrecios = user.rol !== 'tecnico';
+    const cotizacionPdfData = this.buildCotizacionPdfData(cotizacion, includePrecios);
+    const pdfBuffer = await this.pdfService.createCotizacionPdf(cotizacionPdfData);
+    const filename = this.buildPdfFilename(cotizacion.numero ?? id);
+
+    return new StreamableFile(pdfBuffer, {
+      type: 'application/pdf',
+      disposition: `attachment; filename="${filename}"`,
+      length: pdfBuffer.length,
+    });
+  }
+
+  private buildCotizacionPdfData(cotizacion: any, includePrecios: boolean): CotizacionPdfData {
+    const sanitizedItems = cotizacion.items?.map((item) => ({
+      ...item,
+      precioUnitario: includePrecios ? item.precioUnitario : null,
+      subtotal: includePrecios ? item.subtotal : null,
+    })) ?? [];
+
+    return {
+      numero: cotizacion.numero,
+      estado: cotizacion.estado,
+      createdAt: cotizacion.createdAt,
+      cliente: cotizacion.cliente,
+      activo: cotizacion.activo,
+      items: sanitizedItems,
+      subtotal: includePrecios ? cotizacion.subtotal : null,
+      impuestos: includePrecios ? cotizacion.impuestos : null,
+      total: includePrecios ? cotizacion.total : null,
+      includePrecios,
+    };
+  }
+
+  private buildPdfFilename(numero: string): string {
+    const base = numero.replace(/[^a-zA-Z0-9-_]/g, '_');
+    return `cotizacion-${base}.pdf`;
   }
 }

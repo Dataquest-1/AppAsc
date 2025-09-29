@@ -8,6 +8,7 @@ import {
   Delete,
   UseGuards,
   ParseUUIDPipe,
+  StreamableFile,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { CotizacionesService } from './cotizaciones.service';
@@ -55,7 +56,7 @@ export class CotizacionesController {
   }
 
   @Get(':id')
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Obtener cotización por ID',
     description: 'Obtener detalles de una cotización específica. Los técnicos no ven precios.'
   })
@@ -66,6 +67,28 @@ export class CotizacionesController {
     @CurrentUser() user: CurrentUserData,
   ) {
     return this.cotizacionesService.findOne(id, user);
+  }
+
+  @Get(':id/pdf')
+  @ApiOperation({
+    summary: 'Descargar cotización en PDF',
+    description: 'Generar un PDF con el detalle de la cotización',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'PDF generado correctamente',
+    content: {
+      'application/pdf': {
+        schema: { type: 'string', format: 'binary' },
+      },
+    },
+  })
+  @ApiResponse({ status: 404, description: 'Cotización no encontrada' })
+  downloadPdf(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: CurrentUserData,
+  ): Promise<StreamableFile> {
+    return this.cotizacionesService.generatePdf(id, user);
   }
 
   @Patch(':id')
