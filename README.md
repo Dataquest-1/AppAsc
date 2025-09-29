@@ -183,4 +183,4 @@ Propietario - Todos los derechos reservados.
 
 ---
 
-**Desarrollado por Supernova Corp** 🚀
+**Desarrollado por Servicios DataQuest** 🚀
