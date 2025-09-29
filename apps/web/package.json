@@ -45,7 +45,6 @@
     "react-csv": "^2.2.2",
     "@types/react-csv": "^1.1.10",
     "react-qr-code": "^2.0.12",
-    "qrcode.js": "^0.0.0",
     "moment": "^2.29.4",
     "lodash": "^4.17.21",
     "@types/lodash": "^4.14.202"
